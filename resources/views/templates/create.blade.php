@@ -50,7 +50,7 @@
                     <label>Default Subject <span class="req">*</span></label>
                     <input type="text" name="subject"
                         value="{{ old('subject', $template->subject ?? '') }}"
-                        placeholder="Use {{first_name}}, {{company}} as variables"
+                        placeholder="Use @{{first_name}}, @{{company}} as variables"
                         class="{{ $errors->has('subject') ? 'invalid' : '' }}">
                     @error('subject') <p class="field-error">{{ $message }}</p> @enderror
                 </div>
@@ -63,7 +63,12 @@
                         class="{{ $errors->has('html_content') ? 'invalid' : '' }}"
                         style="font-family:'Courier New',monospace;font-size:12px;line-height:1.6;">{{ old('html_content', $template->html_content ?? '') }}</textarea>
                     @error('html_content') <p class="field-error">{{ $message }}</p> @enderror
-                    <p class="hint">Supports full HTML. Use variables: <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">{{name}}</code> <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">{{first_name}}</code> <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">{{email}}</code> <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">{{company}}</code></p>
+                    <p class="hint">Supports full HTML. Use variables:
+                        <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">@{{name}}</code>
+                        <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">@{{first_name}}</code>
+                        <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">@{{email}}</code>
+                        <code style="background:#f0ede8;padding:2px 5px;border-radius:3px;">@{{company}}</code>
+                    </p>
                 </div>
 
                 <div class="form-group">

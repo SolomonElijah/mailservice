@@ -93,7 +93,12 @@
                             class="{{ $errors->has('html_content') ? 'invalid' : '' }}"
                             style="font-family:'Courier New',monospace;font-size:12px;line-height:1.5;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
                         @error('html_content') <p class="field-error">{{ $message }}</p> @enderror
-                        <p class="hint">Variables: <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">{{name}}</code> <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">{{first_name}}</code> <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">{{email}}</code> <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">{{company}}</code></p>
+                        <p class="hint">Variables:
+                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{name}}</code>
+                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{first_name}}</code>
+                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{email}}</code>
+                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{company}}</code>
+                        </p>
                     </div>
                 </div>
             </div>
