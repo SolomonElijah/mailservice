@@ -57,8 +57,9 @@
     </div>
 </div>
 @else
-<div style="text-align:center;margin-top:8px;">
-    <a href="{{ route('templates.seed') }}" class="btn btn-secondary btn-sm">✨ Re-load Built-in Templates</a>
-</div>
+<form method="POST" action="{{ route('templates.seed') }}">
+    @csrf
+    <button type="submit" class="btn btn-secondary">✨ Load Built-in Templates</button>
+</form>
 @endif
 @endsection
