@@ -142,7 +142,7 @@ class TemplateController extends Controller
 
     private function authorize(EmailTemplate $template): void
     {
-        abort_if($template->user_id !== Auth::id(), 403);
+        abort_if($template->user_id != Auth::id(), 403);
     }
 
     // ═══════════════════════════════════════
