@@ -14,6 +14,7 @@ use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\SchedulerController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\ProviderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,10 +56,8 @@ Route::post('/webhooks/resend', [WebhookController::class, 'resend'])
 Route::middleware('guest')->group(function () {
     Route::get('/login',  [LoginController::class, 'showForm'])->name('login');
     Route::post('/login', [LoginController::class, 'login'])->name('login.submit');
-
     Route::get('/register',  [RegisterController::class, 'showForm'])->name('register');
     Route::post('/register', [RegisterController::class, 'register'])->name('register.submit');
-
     Route::get('/forgot-password',        [ForgotPasswordController::class, 'showForgotForm'])->name('password.request');
     Route::post('/forgot-password',       [ForgotPasswordController::class, 'sendResetLink'])->name('password.email');
     Route::get('/reset-password/{token}', [ForgotPasswordController::class, 'showResetForm'])->name('password.reset');
@@ -82,18 +81,23 @@ Route::middleware('auth')->group(function () {
     Route::get('/analytics',       [TrackingController::class, 'index'])->name('analytics.index');
     Route::get('/analytics/setup', fn() => view('analytics.webhook-setup'))->name('analytics.webhook-setup');
 
+    // Providers
+    Route::get('/providers',          [ProviderController::class, 'index'])->name('providers.index');
+    Route::post('/providers/test',    [ProviderController::class, 'test'])->name('providers.test');
+    Route::post('/providers/send-test', [ProviderController::class, 'sendTest'])->name('providers.send-test');
+
     // Email Sender
     Route::get('/mailer',         [EmailController::class, 'index'])->name('email.index');
     Route::post('/send/single',   [EmailController::class, 'sendSingle'])->name('email.send.single');
     Route::post('/send/multiple', [EmailController::class, 'sendMultiple'])->name('email.send.multiple');
     Route::post('/send/advanced', [EmailController::class, 'sendAdvanced'])->name('email.send.advanced');
 
-    // Scheduler (individual emails)
-    Route::get('/scheduler',                   [SchedulerController::class, 'index'])->name('scheduler.index');
-    Route::post('/scheduler',                  [SchedulerController::class, 'store'])->name('scheduler.store');
-    Route::patch('/scheduler/{email}/cancel',  [SchedulerController::class, 'cancel'])->name('scheduler.cancel');
-    Route::patch('/scheduler/{email}/retry',   [SchedulerController::class, 'retry'])->name('scheduler.retry');
-    Route::delete('/scheduler/{email}',        [SchedulerController::class, 'destroy'])->name('scheduler.destroy');
+    // Scheduler
+    Route::get('/scheduler',                  [SchedulerController::class, 'index'])->name('scheduler.index');
+    Route::post('/scheduler',                 [SchedulerController::class, 'store'])->name('scheduler.store');
+    Route::patch('/scheduler/{email}/cancel', [SchedulerController::class, 'cancel'])->name('scheduler.cancel');
+    Route::patch('/scheduler/{email}/retry',  [SchedulerController::class, 'retry'])->name('scheduler.retry');
+    Route::delete('/scheduler/{email}',       [SchedulerController::class, 'destroy'])->name('scheduler.destroy');
 
     // Templates
     Route::get('/templates',                    [TemplateController::class, 'index'])->name('templates.index');
@@ -119,13 +123,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/campaigns/{campaign}/send',      [CampaignController::class, 'send'])->name('campaigns.send');
     Route::post('/campaigns/{campaign}/duplicate', [CampaignController::class, 'duplicate'])->name('campaigns.duplicate');
 
-    // Contact Lists
-    Route::get('/contacts',                 [ContactController::class, 'index'])->name('contacts.index');
-    Route::post('/contacts/lists',          [ContactController::class, 'storeList'])->name('contacts.list.store');
-    Route::patch('/contacts/lists/{list}',  [ContactController::class, 'updateList'])->name('contacts.list.update');
-    Route::delete('/contacts/lists/{list}', [ContactController::class, 'destroyList'])->name('contacts.list.destroy');
-
-    // Contacts within a list
+    // Contacts
+    Route::get('/contacts',                  [ContactController::class, 'index'])->name('contacts.index');
+    Route::post('/contacts/lists',           [ContactController::class, 'storeList'])->name('contacts.list.store');
+    Route::patch('/contacts/lists/{list}',   [ContactController::class, 'updateList'])->name('contacts.list.update');
+    Route::delete('/contacts/lists/{list}',  [ContactController::class, 'destroyList'])->name('contacts.list.destroy');
     Route::get('/contacts/{list}',                       [ContactController::class, 'show'])->name('contacts.show');
     Route::post('/contacts/{list}/contacts',             [ContactController::class, 'storeContact'])->name('contacts.store');
     Route::patch('/contacts/{list}/contacts/{contact}',  [ContactController::class, 'updateContact'])->name('contacts.update');
@@ -140,29 +142,24 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile',          [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
-    // Logout
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
-
-    // Stop impersonating (any auth user can hit this)
     Route::post('/admin/stop-impersonating', [AdminController::class, 'stopImpersonating'])->name('admin.stop-impersonating');
 });
 
 /*
 |--------------------------------------------------------------------------
-| Admin Routes (auth + admin middleware)
+| Admin Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth','admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/',        [AdminController::class, 'dashboard'])->name('dashboard');
     Route::get('/users',   [AdminController::class, 'users'])->name('users');
-    Route::patch('/users/{user}',  [AdminController::class, 'updateUser'])->name('users.update');
-    Route::delete('/users/{user}', [AdminController::class, 'deleteUser'])->name('users.delete');
+    Route::patch('/users/{user}',            [AdminController::class, 'updateUser'])->name('users.update');
+    Route::delete('/users/{user}',           [AdminController::class, 'deleteUser'])->name('users.delete');
     Route::post('/users/{user}/impersonate', [AdminController::class, 'impersonate'])->name('impersonate');
-
-    Route::get('/queues',          [AdminController::class, 'queues'])->name('queues');
-    Route::post('/queues/retry',   [AdminController::class, 'retryJob'])->name('queues.retry');
-    Route::post('/queues/flush',   [AdminController::class, 'flushFailed'])->name('queues.flush');
-
+    Route::get('/queues',        [AdminController::class, 'queues'])->name('queues');
+    Route::post('/queues/retry', [AdminController::class, 'retryJob'])->name('queues.retry');
+    Route::post('/queues/flush', [AdminController::class, 'flushFailed'])->name('queues.flush');
     Route::get('/settings',              [AdminController::class, 'settings'])->name('settings');
     Route::post('/settings/clear-cache', [AdminController::class, 'clearCache'])->name('settings.clear-cache');
     Route::post('/settings/clear-logs',  [AdminController::class, 'clearLogs'])->name('settings.clear-logs');
