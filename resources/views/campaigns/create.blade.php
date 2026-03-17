@@ -73,8 +73,8 @@
                             <option value="">— Select a template to load —</option>
                             @foreach($templates as $t)
                             <option value="{{ $t->id }}"
-                                data-html="{{ htmlspecialchars($t->html_content) }}"
-                                data-subject="{{ htmlspecialchars($t->subject) }}"
+                                data-html="{{ $t->html_content }}"
+                                data-subject="{{ $t->subject }}"
                                 {{ old('email_template_id', $campaign->email_template_id ?? '') == $t->id ? 'selected' : '' }}>
                                 {{ $t->category_icon }} {{ $t->name }}
                             </option>
@@ -176,7 +176,7 @@
                     </div>
                 </div>
                 <div style="height:300px;overflow:hidden;border-bottom-left-radius:12px;border-bottom-right-radius:12px;">
-                    <iframe id="previewFrame" style="width:100%;height:100%;border:none;background:#f5f5f5;transform:scale(0.7);transform-origin:top left;width:143%;height:143%;"></iframe>
+                    <iframe id="previewFrame" style="width:143%;height:143%;border:none;background:#fff;transform:scale(0.7);transform-origin:top left;"></iframe>
                 </div>
             </div>
 
@@ -187,7 +187,7 @@
                         💾 Save as Draft
                     </button>
                     <button type="submit" name="send_now" value="1" class="btn btn-primary" style="justify-content:center;"
-                        onclick="return confirm('Send this campaign NOW to all selected contacts?')">
+                        onclick="return validateAndConfirm()">
                         🚀 Save & Send Now
                     </button>
                     <p style="font-size:11px;color:var(--muted);text-align:center;">Sending immediately will deliver to all active subscribers in the selected list.</p>
@@ -213,7 +213,12 @@ document.querySelectorAll('#templatePicker option[data-html]').forEach(opt => {
 
 function loadTemplate(id) {
     if (!id || !templates[id]) return;
-    document.getElementById('html_content').value = templates[id].html;
+
+    // Decode HTML entities so raw HTML goes into textarea, not &lt; etc.
+    const decoder = document.createElement('textarea');
+    decoder.innerHTML = templates[id].html;
+    document.getElementById('html_content').value = decoder.value;
+
     document.getElementById('templateIdInput').value = id;
     const subj = document.querySelector('input[name="subject"]');
     if (!subj.value) subj.value = templates[id].subject;
@@ -225,6 +230,15 @@ function updatePreview() {
     const frame = document.getElementById('previewFrame');
     const doc = frame.contentDocument || frame.contentWindow.document;
     doc.open(); doc.write(html); doc.close();
+}
+
+function validateAndConfirm() {
+    const selected = document.querySelector('input[name="contact_list_id"]:checked');
+    if (!selected) {
+        alert('⚠️ Please select a contact list before sending.\n\nGo to Contacts → Create a list and add contacts first, then come back here.');
+        return false;
+    }
+    return confirm('Send this campaign NOW to all active subscribers in the selected list?');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
