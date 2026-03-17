@@ -91,10 +91,6 @@
 
             <hr class="divider">
 
-            <p style="font-size: 13px; color: #888;">
-                This email was sent via <strong style="color:#1a1a2e;">Laravel Mailer</strong>.<br>
-                Sent on {{ now()->format('F j, Y \a\t g:i A') }}
-            </p>
         </div>
 
         <div class="footer">
