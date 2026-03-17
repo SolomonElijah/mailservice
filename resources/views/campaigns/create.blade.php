@@ -99,9 +99,9 @@
                         </button>
                     </div>
 
-                    {{-- Visual Editor (TinyMCE) --}}
+                    {{-- Visual Editor (Quill) --}}
                     <div id="editor-visual" class="form-group">
-                        <textarea id="tinymce_editor" style="display:none;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
+                        <div id="quill-editor" style="height:420px;font-size:15px;background:#fff;"></div>
                     </div>
 
                     {{-- Raw HTML Editor --}}
@@ -226,47 +226,56 @@
 @endsection
 
 @push('scripts')
-{{-- TinyMCE free CDN (no API key needed for basic use) --}}
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script>
 let editorMode = 'visual';
-let tinyReady  = false;
+let quill;
 
-// ── Init TinyMCE ──────────────────────────────────────────────
-tinymce.init({
-    selector: '#tinymce_editor',
-    height: 480,
-    menubar: true,
-    plugins: [
-        'anchor', 'autolink', 'charmap', 'codesample', 'emoticons',
-        'image', 'link', 'lists', 'media', 'searchreplace', 'table',
-        'visualblocks', 'wordcount', 'code', 'fullscreen', 'preview',
-    ],
-    toolbar: 'undo redo | blocks fontfamily fontsize | ' +
-             'bold italic underline strikethrough forecolor backcolor | ' +
-             'link image table | ' +
-             'alignleft aligncenter alignright alignjustify | ' +
-             'bullist numlist outdent indent | ' +
-             'removeformat | code fullscreen preview',
-    skin: 'oxide',
-    content_css: 'default',
-    branding: false,
-    promotion: false,
-    setup: function(editor) {
-        editor.on('init', function() {
-            tinyReady = true;
-            // Load existing content
-            const existing = document.getElementById('html_content_final').value;
-            if (existing) {
-                editor.setContent(existing);
-            }
-            updatePreview();
+// ── Init Quill ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+    quill = new Quill('#quill-editor', {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, 4, false] }],
+                [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'color': [] }, { 'background': [] }],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                [{ 'indent': '-1' }, { 'indent': '+1' }],
+                ['link', 'image', 'blockquote'],
+                ['clean'],
+            ],
+        },
+    });
+
+    // Load existing content into Quill
+    const existing = document.getElementById('html_content_final').value;
+    if (existing) {
+        quill.clipboard.dangerouslyPasteHTML(existing);
+    }
+
+    // Sync Quill → hidden field + preview on every change
+    quill.on('text-change', function() {
+        syncFromVisual();
+        updatePreview();
+    });
+
+    updatePreview();
+
+    // Highlight selected radio
+    document.querySelectorAll('input[name="contact_list_id"]').forEach(r => {
+        if (r.checked) r.closest('label').style.borderColor = 'var(--gold)';
+        r.addEventListener('change', function() {
+            document.querySelectorAll('input[name="contact_list_id"]').forEach(x => {
+                x.closest('label').style.borderColor = 'var(--border)';
+            });
+            if (this.checked) this.closest('label').style.borderColor = 'var(--gold)';
         });
-        editor.on('input change keyup', function() {
-            syncFromVisual();
-            updatePreview();
-        });
-    },
+    });
 });
 
 // ── Tab switching ─────────────────────────────────────────────
@@ -286,11 +295,10 @@ function switchTab(mode) {
         visualDiv.style.display    = 'block';
         htmlDiv.style.display      = 'none';
 
-        // Sync raw HTML → visual editor
-        if (tinyReady) {
-            const raw = document.getElementById('html_content').value;
-            tinymce.get('tinymce_editor').setContent(raw);
-        }
+        // Sync raw HTML → Quill
+        const raw = document.getElementById('html_content').value;
+        if (raw) quill.clipboard.dangerouslyPasteHTML(raw);
+
     } else {
         htmlBtn.style.background   = 'var(--ink)';
         htmlBtn.style.color        = '#fff';
@@ -299,25 +307,20 @@ function switchTab(mode) {
         htmlDiv.style.display      = 'block';
         visualDiv.style.display    = 'none';
 
-        // Sync visual editor → raw HTML textarea
-        if (tinyReady) {
-            document.getElementById('html_content').value =
-                tinymce.get('tinymce_editor').getContent();
-        }
+        // Sync Quill → raw textarea
+        document.getElementById('html_content').value = quill.getSemanticHTML();
         updatePreview();
     }
 }
 
-// ── Sync visual → hidden field ────────────────────────────────
+// ── Sync Quill → hidden field ─────────────────────────────────
 function syncFromVisual() {
-    if (tinyReady) {
-        const content = tinymce.get('tinymce_editor').getContent();
-        document.getElementById('html_content_final').value = content;
-        document.getElementById('html_content').value = content;
-    }
+    const content = quill.getSemanticHTML();
+    document.getElementById('html_content_final').value = content;
+    document.getElementById('html_content').value = content;
 }
 
-// ── Sync raw HTML → hidden field ─────────────────────────────
+// ── Sync raw HTML textarea → hidden field ─────────────────────
 document.addEventListener('input', function(e) {
     if (e.target.id === 'html_content') {
         document.getElementById('html_content_final').value = e.target.value;
@@ -325,10 +328,10 @@ document.addEventListener('input', function(e) {
     }
 });
 
-// ── Before form submit — sync whichever editor is active ──────
+// ── Before form submit ────────────────────────────────────────
 document.getElementById('campaignForm').addEventListener('submit', function() {
-    if (editorMode === 'visual' && tinyReady) {
-        const content = tinymce.get('tinymce_editor').getContent();
+    if (editorMode === 'visual') {
+        const content = quill.getSemanticHTML();
         document.getElementById('html_content_final').value = content;
         document.getElementById('html_content').value = content;
     } else {
@@ -337,7 +340,7 @@ document.getElementById('campaignForm').addEventListener('submit', function() {
     }
 });
 
-// ── Template loader ────────────────────────────────────────────
+// ── Template loader ───────────────────────────────────────────
 const templates = {};
 document.querySelectorAll('#templatePicker option[data-html]').forEach(opt => {
     templates[opt.value] = {
@@ -356,24 +359,22 @@ function loadTemplate(id) {
     // Load into both editors
     document.getElementById('html_content').value = html;
     document.getElementById('html_content_final').value = html;
-    if (tinyReady) {
-        tinymce.get('tinymce_editor').setContent(html);
-    }
+    quill.clipboard.dangerouslyPasteHTML(html);
 
     document.getElementById('templateIdInput').value = id;
 
-    // Only set subject if empty
+    // Only fill subject if currently empty
     const subj = document.querySelector('input[name="subject"]');
     if (!subj.value) {
-        const decoder2 = document.createElement('textarea');
-        decoder2.innerHTML = templates[id].subject;
-        subj.value = decoder2.value;
+        const d = document.createElement('textarea');
+        d.innerHTML = templates[id].subject;
+        subj.value = d.value;
     }
 
     updatePreview();
 }
 
-// ── Live preview ───────────────────────────────────────────────
+// ── Live preview ──────────────────────────────────────────────
 function updatePreview() {
     const html = document.getElementById('html_content_final').value
               || document.getElementById('html_content').value;
@@ -382,7 +383,7 @@ function updatePreview() {
     doc.open(); doc.write(html); doc.close();
 }
 
-// ── Contact list validation ────────────────────────────────────
+// ── Contact list validation ───────────────────────────────────
 function validateAndConfirm() {
     const selected = document.querySelector('input[name="contact_list_id"]:checked');
     if (!selected) {
@@ -391,18 +392,5 @@ function validateAndConfirm() {
     }
     return confirm('Send this campaign NOW to all active subscribers in the selected list?');
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    updatePreview();
-    document.querySelectorAll('input[name="contact_list_id"]').forEach(r => {
-        if (r.checked) r.closest('label').style.borderColor = 'var(--gold)';
-        r.addEventListener('change', function() {
-            document.querySelectorAll('input[name="contact_list_id"]').forEach(x => {
-                x.closest('label').style.borderColor = 'var(--border)';
-            });
-            if (this.checked) this.closest('label').style.borderColor = 'var(--gold)';
-        });
-    });
-});
 </script>
 @endpush
