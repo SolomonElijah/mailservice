@@ -239,6 +239,6 @@ class CampaignController extends Controller
 
     private function authorize(Campaign $campaign): void
     {
-        abort_if($campaign->user_id !== Auth::id(), 403);
+        abort_if($campaign->user_id != Auth::id(), 403);
     }
 }
