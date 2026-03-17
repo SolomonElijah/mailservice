@@ -59,11 +59,11 @@
                 </div>
             </div>
 
-            {{-- Template picker --}}
+            {{-- Template picker + Editor --}}
             <div class="card">
                 <div class="card-header">
                     <div class="card-icon">🎨</div>
-                    <div><h3>Email Content</h3><p>Design your email visually or edit raw HTML</p></div>
+                    <div><h3>Email Content</h3><p>Load a template then click any text to edit it</p></div>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
@@ -82,44 +82,46 @@
                         </select>
                         <input type="hidden" name="email_template_id" id="templateIdInput"
                             value="{{ old('email_template_id', $campaign->email_template_id ?? '') }}">
-                        <p class="hint">Load a template as a starting point, then edit it visually below.</p>
                     </div>
 
                     {{-- Editor mode tabs --}}
-                    <div style="display:flex;gap:0;margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;">
-                        <button type="button" id="tab-visual"
-                            onclick="switchTab('visual')"
+                    <div style="display:flex;gap:0;margin-bottom:0;border:1.5px solid var(--border);border-radius:8px 8px 0 0;overflow:hidden;">
+                        <button type="button" id="tab-visual" onclick="switchTab('visual')"
                             style="flex:1;padding:10px;border:none;background:var(--ink);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">
-                            ✏️ Visual Editor
+                            🖱️ Click-to-Edit Preview
                         </button>
-                        <button type="button" id="tab-html"
-                            onclick="switchTab('html')"
+                        <button type="button" id="tab-html" onclick="switchTab('html')"
                             style="flex:1;padding:10px;border:none;background:var(--cream);color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">
                             &lt;/&gt; Raw HTML
                         </button>
                     </div>
 
-                    {{-- Visual Editor (Quill) --}}
-                    <div id="editor-visual" class="form-group">
-                        <div id="quill-editor" style="height:420px;font-size:15px;background:#fff;"></div>
+                    {{-- Visual: iframe with contenteditable injected --}}
+                    <div id="editor-visual"
+                        style="border:1.5px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:#f5f5f5;">
+                        <div style="background:#fef9e8;border-bottom:1px solid #fde68a;padding:8px 14px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:6px;">
+                            ✏️ <strong>Click any text</strong> in the preview below to edit it directly. Styles are fully preserved.
+                        </div>
+                        <iframe id="editableFrame"
+                            style="width:100%;height:520px;border:none;background:#fff;display:block;">
+                        </iframe>
                     </div>
 
-                    {{-- Raw HTML Editor --}}
-                    <div id="editor-html" class="form-group" style="display:none;">
-                        <label>Raw HTML <span class="req">*</span></label>
-                        <textarea id="html_content" rows="18"
+                    {{-- Raw HTML textarea --}}
+                    <div id="editor-html" style="display:none;">
+                        <textarea id="html_content" rows="20"
                             placeholder="Paste your full HTML email here..."
                             class="{{ $errors->has('html_content') ? 'invalid' : '' }}"
-                            style="font-family:'Courier New',monospace;font-size:12px;line-height:1.5;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
+                            style="font-family:'Courier New',monospace;font-size:12px;line-height:1.5;border-radius:0 0 8px 8px;border-top:none;width:100%;resize:vertical;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
                         @error('html_content') <p class="field-error">{{ $message }}</p> @enderror
                     </div>
 
-                    {{-- Hidden field that actually gets submitted --}}
+                    {{-- Hidden field submitted with form --}}
                     <input type="hidden" name="html_content" id="html_content_final"
                         value="{{ old('html_content', $campaign->html_content ?? '') }}">
 
-                    <p class="hint" style="margin-top:8px;">
-                        Variables (optional):
+                    <p class="hint" style="margin-top:10px;">
+                        Optional personalisation variables:
                         <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{name}}</code>
                         <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{first_name}}</code>
                         <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{email}}</code>
@@ -226,62 +228,62 @@
 @endsection
 
 @push('scripts')
-<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script>
 let editorMode = 'visual';
-let quill;
 
-// ── Init Quill ────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+// ── Write HTML into the editable iframe ──────────────────────
+function renderEditableFrame(html) {
+    const frame = document.getElementById('editableFrame');
+    const doc   = frame.contentDocument || frame.contentWindow.document;
 
-    quill = new Quill('#quill-editor', {
-        theme: 'snow',
-        modules: {
-            toolbar: [
-                [{ 'header': [1, 2, 3, 4, false] }],
-                [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
-                ['bold', 'italic', 'underline', 'strike'],
-                [{ 'color': [] }, { 'background': [] }],
-                [{ 'align': [] }],
-                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                [{ 'indent': '-1' }, { 'indent': '+1' }],
-                ['link', 'image', 'blockquote'],
-                ['clean'],
-            ],
-        },
-    });
-
-    // Load existing content into Quill
-    const existing = document.getElementById('html_content_final').value;
-    if (existing) {
-        quill.clipboard.dangerouslyPasteHTML(existing);
-    }
-
-    // Sync Quill → hidden field + preview on every change
-    quill.on('text-change', function() {
-        syncFromVisual();
-        updatePreview();
-    });
-
-    updatePreview();
-
-    // Highlight selected radio
-    document.querySelectorAll('input[name="contact_list_id"]').forEach(r => {
-        if (r.checked) r.closest('label').style.borderColor = 'var(--gold)';
-        r.addEventListener('change', function() {
-            document.querySelectorAll('input[name="contact_list_id"]').forEach(x => {
-                x.closest('label').style.borderColor = 'var(--border)';
+    // Inject the HTML + make every text node editable + sync back on change
+    const wrapped = html.replace('</body>',
+        `<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Make all text-bearing elements click-to-edit
+            document.querySelectorAll('p,h1,h2,h3,h4,h5,h6,span,a,td,th,li,div,strong,em,b,i').forEach(function(el) {
+                if (el.children.length === 0 && el.textContent.trim()) {
+                    el.setAttribute('contenteditable', 'true');
+                    el.style.outline = 'none';
+                    el.style.cursor  = 'text';
+                    el.addEventListener('focus', function() {
+                        this.style.outline = '2px dashed #d4a843';
+                        this.style.outlineOffset = '2px';
+                        this.style.borderRadius = '2px';
+                    });
+                    el.addEventListener('blur', function() {
+                        this.style.outline = 'none';
+                        parent.syncFromFrame();
+                    });
+                    el.addEventListener('keyup', function() {
+                        parent.syncFromFrame();
+                    });
+                }
             });
-            if (this.checked) this.closest('label').style.borderColor = 'var(--gold)';
         });
-    });
-});
+        <\/script></body>`
+    );
+
+    doc.open();
+    doc.write(wrapped);
+    doc.close();
+}
+
+// ── Pull HTML back from iframe → hidden field + raw textarea ──
+window.syncFromFrame = function() {
+    const frame = document.getElementById('editableFrame');
+    const doc   = frame.contentDocument || frame.contentWindow.document;
+    const html  = doc.documentElement.outerHTML;
+    document.getElementById('html_content_final').value = html;
+    document.getElementById('html_content').value = html;
+
+    // Also update the small right-panel preview
+    updatePreview();
+};
 
 // ── Tab switching ─────────────────────────────────────────────
 function switchTab(mode) {
     editorMode = mode;
-
     const visualBtn = document.getElementById('tab-visual');
     const htmlBtn   = document.getElementById('tab-html');
     const visualDiv = document.getElementById('editor-visual');
@@ -294,11 +296,8 @@ function switchTab(mode) {
         htmlBtn.style.color        = 'var(--muted)';
         visualDiv.style.display    = 'block';
         htmlDiv.style.display      = 'none';
-
-        // Sync raw HTML → Quill
-        const raw = document.getElementById('html_content').value;
-        if (raw) quill.clipboard.dangerouslyPasteHTML(raw);
-
+        // Re-render iframe with current raw HTML
+        renderEditableFrame(document.getElementById('html_content').value);
     } else {
         htmlBtn.style.background   = 'var(--ink)';
         htmlBtn.style.color        = '#fff';
@@ -306,45 +305,15 @@ function switchTab(mode) {
         visualBtn.style.color      = 'var(--muted)';
         htmlDiv.style.display      = 'block';
         visualDiv.style.display    = 'none';
-
-        // Sync Quill → raw textarea
-        document.getElementById('html_content').value = quill.getSemanticHTML();
         updatePreview();
     }
 }
-
-// ── Sync Quill → hidden field ─────────────────────────────────
-function syncFromVisual() {
-    const content = quill.getSemanticHTML();
-    document.getElementById('html_content_final').value = content;
-    document.getElementById('html_content').value = content;
-}
-
-// ── Sync raw HTML textarea → hidden field ─────────────────────
-document.addEventListener('input', function(e) {
-    if (e.target.id === 'html_content') {
-        document.getElementById('html_content_final').value = e.target.value;
-        updatePreview();
-    }
-});
-
-// ── Before form submit ────────────────────────────────────────
-document.getElementById('campaignForm').addEventListener('submit', function() {
-    if (editorMode === 'visual') {
-        const content = quill.getSemanticHTML();
-        document.getElementById('html_content_final').value = content;
-        document.getElementById('html_content').value = content;
-    } else {
-        document.getElementById('html_content_final').value =
-            document.getElementById('html_content').value;
-    }
-});
 
 // ── Template loader ───────────────────────────────────────────
 const templates = {};
 document.querySelectorAll('#templatePicker option[data-html]').forEach(opt => {
     templates[opt.value] = {
-        html: opt.getAttribute('data-html'),
+        html:    opt.getAttribute('data-html'),
         subject: opt.getAttribute('data-subject'),
     };
 });
@@ -356,14 +325,11 @@ function loadTemplate(id) {
     decoder.innerHTML = templates[id].html;
     const html = decoder.value;
 
-    // Load into both editors
-    document.getElementById('html_content').value = html;
+    document.getElementById('html_content').value       = html;
     document.getElementById('html_content_final').value = html;
-    quill.clipboard.dangerouslyPasteHTML(html);
+    document.getElementById('templateIdInput').value    = id;
 
-    document.getElementById('templateIdInput').value = id;
-
-    // Only fill subject if currently empty
+    // Fill subject only if currently empty
     const subj = document.querySelector('input[name="subject"]');
     if (!subj.value) {
         const d = document.createElement('textarea');
@@ -371,26 +337,68 @@ function loadTemplate(id) {
         subj.value = d.value;
     }
 
+    // Render into editable frame if in visual mode
+    if (editorMode === 'visual') {
+        renderEditableFrame(html);
+    }
     updatePreview();
 }
 
-// ── Live preview ──────────────────────────────────────────────
+// ── Sync raw textarea → hidden field + re-render frame ────────
+document.addEventListener('input', function(e) {
+    if (e.target.id === 'html_content') {
+        document.getElementById('html_content_final').value = e.target.value;
+        updatePreview();
+    }
+});
+
+// ── Right-panel preview ───────────────────────────────────────
 function updatePreview() {
     const html = document.getElementById('html_content_final').value
               || document.getElementById('html_content').value;
     const frame = document.getElementById('previewFrame');
+    if (!frame) return;
     const doc = frame.contentDocument || frame.contentWindow.document;
     doc.open(); doc.write(html); doc.close();
 }
+
+// ── Before submit — make sure hidden field is up to date ──────
+document.getElementById('campaignForm').addEventListener('submit', function() {
+    if (editorMode === 'visual') {
+        window.syncFromFrame();
+    } else {
+        document.getElementById('html_content_final').value =
+            document.getElementById('html_content').value;
+    }
+});
 
 // ── Contact list validation ───────────────────────────────────
 function validateAndConfirm() {
     const selected = document.querySelector('input[name="contact_list_id"]:checked');
     if (!selected) {
-        alert('⚠️ Please select a contact list before sending.\n\nGo to Contacts → Create a list and add contacts first, then come back here.');
+        alert('⚠️ Please select a contact list before sending.\n\nGo to Contacts → Create a list and add contacts first.');
         return false;
     }
     return confirm('Send this campaign NOW to all active subscribers in the selected list?');
 }
+
+// ── Init ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    const existing = document.getElementById('html_content_final').value;
+    if (existing) {
+        renderEditableFrame(existing);
+        updatePreview();
+    }
+
+    document.querySelectorAll('input[name="contact_list_id"]').forEach(r => {
+        if (r.checked) r.closest('label').style.borderColor = 'var(--gold)';
+        r.addEventListener('change', function() {
+            document.querySelectorAll('input[name="contact_list_id"]').forEach(x => {
+                x.closest('label').style.borderColor = 'var(--border)';
+            });
+            if (this.checked) this.closest('label').style.borderColor = 'var(--gold)';
+        });
+    });
+});
 </script>
 @endpush
