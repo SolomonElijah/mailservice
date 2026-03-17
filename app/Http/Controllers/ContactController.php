@@ -337,6 +337,6 @@ class ContactController extends Controller
 
     private function authorizeList(ContactList $list): void
     {
-        abort_if($list->user_id !== Auth::id(), 403);
+        abort_if($list->user_id != Auth::id(), 403);
     }
 }

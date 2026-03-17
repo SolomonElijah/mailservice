@@ -63,7 +63,7 @@
             <div class="card">
                 <div class="card-header">
                     <div class="card-icon">🎨</div>
-                    <div><h3>Email Content</h3><p>Choose a template or write custom HTML</p></div>
+                    <div><h3>Email Content</h3><p>Design your email visually or edit raw HTML</p></div>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
@@ -82,24 +82,49 @@
                         </select>
                         <input type="hidden" name="email_template_id" id="templateIdInput"
                             value="{{ old('email_template_id', $campaign->email_template_id ?? '') }}">
-                        <p class="hint">Selecting a template will fill the HTML editor below. You can still edit it.</p>
+                        <p class="hint">Load a template as a starting point, then edit it visually below.</p>
                     </div>
 
-                    <div class="form-group">
-                        <label>HTML Content <span class="req">*</span></label>
-                        <textarea name="html_content" id="html_content" rows="14"
-                            placeholder="Full HTML email content..."
-                            oninput="updatePreview()"
+                    {{-- Editor mode tabs --}}
+                    <div style="display:flex;gap:0;margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;">
+                        <button type="button" id="tab-visual"
+                            onclick="switchTab('visual')"
+                            style="flex:1;padding:10px;border:none;background:var(--ink);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">
+                            ✏️ Visual Editor
+                        </button>
+                        <button type="button" id="tab-html"
+                            onclick="switchTab('html')"
+                            style="flex:1;padding:10px;border:none;background:var(--cream);color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">
+                            &lt;/&gt; Raw HTML
+                        </button>
+                    </div>
+
+                    {{-- Visual Editor (TinyMCE) --}}
+                    <div id="editor-visual" class="form-group">
+                        <textarea id="tinymce_editor" style="display:none;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
+                    </div>
+
+                    {{-- Raw HTML Editor --}}
+                    <div id="editor-html" class="form-group" style="display:none;">
+                        <label>Raw HTML <span class="req">*</span></label>
+                        <textarea id="html_content" rows="18"
+                            placeholder="Paste your full HTML email here..."
                             class="{{ $errors->has('html_content') ? 'invalid' : '' }}"
                             style="font-family:'Courier New',monospace;font-size:12px;line-height:1.5;">{{ old('html_content', $campaign->html_content ?? '') }}</textarea>
                         @error('html_content') <p class="field-error">{{ $message }}</p> @enderror
-                        <p class="hint">Variables:
-                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{name}}</code>
-                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{first_name}}</code>
-                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{email}}</code>
-                            <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{company}}</code>
-                        </p>
                     </div>
+
+                    {{-- Hidden field that actually gets submitted --}}
+                    <input type="hidden" name="html_content" id="html_content_final"
+                        value="{{ old('html_content', $campaign->html_content ?? '') }}">
+
+                    <p class="hint" style="margin-top:8px;">
+                        Variables (optional):
+                        <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{name}}</code>
+                        <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{first_name}}</code>
+                        <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{email}}</code>
+                        <code style="background:#f0ede8;padding:1px 5px;border-radius:3px;font-size:11px;">@{{company}}</code>
+                    </p>
                 </div>
             </div>
 
@@ -201,8 +226,118 @@
 @endsection
 
 @push('scripts')
+{{-- TinyMCE free CDN (no API key needed for basic use) --}}
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
-// Template loader
+let editorMode = 'visual';
+let tinyReady  = false;
+
+// ── Init TinyMCE ──────────────────────────────────────────────
+tinymce.init({
+    selector: '#tinymce_editor',
+    height: 480,
+    menubar: true,
+    plugins: [
+        'anchor', 'autolink', 'charmap', 'codesample', 'emoticons',
+        'image', 'link', 'lists', 'media', 'searchreplace', 'table',
+        'visualblocks', 'wordcount', 'code', 'fullscreen', 'preview',
+    ],
+    toolbar: 'undo redo | blocks fontfamily fontsize | ' +
+             'bold italic underline strikethrough forecolor backcolor | ' +
+             'link image table | ' +
+             'alignleft aligncenter alignright alignjustify | ' +
+             'bullist numlist outdent indent | ' +
+             'removeformat | code fullscreen preview',
+    skin: 'oxide',
+    content_css: 'default',
+    branding: false,
+    promotion: false,
+    setup: function(editor) {
+        editor.on('init', function() {
+            tinyReady = true;
+            // Load existing content
+            const existing = document.getElementById('html_content_final').value;
+            if (existing) {
+                editor.setContent(existing);
+            }
+            updatePreview();
+        });
+        editor.on('input change keyup', function() {
+            syncFromVisual();
+            updatePreview();
+        });
+    },
+});
+
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(mode) {
+    editorMode = mode;
+
+    const visualBtn = document.getElementById('tab-visual');
+    const htmlBtn   = document.getElementById('tab-html');
+    const visualDiv = document.getElementById('editor-visual');
+    const htmlDiv   = document.getElementById('editor-html');
+
+    if (mode === 'visual') {
+        visualBtn.style.background = 'var(--ink)';
+        visualBtn.style.color      = '#fff';
+        htmlBtn.style.background   = 'var(--cream)';
+        htmlBtn.style.color        = 'var(--muted)';
+        visualDiv.style.display    = 'block';
+        htmlDiv.style.display      = 'none';
+
+        // Sync raw HTML → visual editor
+        if (tinyReady) {
+            const raw = document.getElementById('html_content').value;
+            tinymce.get('tinymce_editor').setContent(raw);
+        }
+    } else {
+        htmlBtn.style.background   = 'var(--ink)';
+        htmlBtn.style.color        = '#fff';
+        visualBtn.style.background = 'var(--cream)';
+        visualBtn.style.color      = 'var(--muted)';
+        htmlDiv.style.display      = 'block';
+        visualDiv.style.display    = 'none';
+
+        // Sync visual editor → raw HTML textarea
+        if (tinyReady) {
+            document.getElementById('html_content').value =
+                tinymce.get('tinymce_editor').getContent();
+        }
+        updatePreview();
+    }
+}
+
+// ── Sync visual → hidden field ────────────────────────────────
+function syncFromVisual() {
+    if (tinyReady) {
+        const content = tinymce.get('tinymce_editor').getContent();
+        document.getElementById('html_content_final').value = content;
+        document.getElementById('html_content').value = content;
+    }
+}
+
+// ── Sync raw HTML → hidden field ─────────────────────────────
+document.addEventListener('input', function(e) {
+    if (e.target.id === 'html_content') {
+        document.getElementById('html_content_final').value = e.target.value;
+        updatePreview();
+    }
+});
+
+// ── Before form submit — sync whichever editor is active ──────
+document.getElementById('campaignForm').addEventListener('submit', function() {
+    if (editorMode === 'visual' && tinyReady) {
+        const content = tinymce.get('tinymce_editor').getContent();
+        document.getElementById('html_content_final').value = content;
+        document.getElementById('html_content').value = content;
+    } else {
+        document.getElementById('html_content_final').value =
+            document.getElementById('html_content').value;
+    }
+});
+
+// ── Template loader ────────────────────────────────────────────
 const templates = {};
 document.querySelectorAll('#templatePicker option[data-html]').forEach(opt => {
     templates[opt.value] = {
@@ -214,24 +349,40 @@ document.querySelectorAll('#templatePicker option[data-html]').forEach(opt => {
 function loadTemplate(id) {
     if (!id || !templates[id]) return;
 
-    // Decode HTML entities so raw HTML goes into textarea, not &lt; etc.
     const decoder = document.createElement('textarea');
     decoder.innerHTML = templates[id].html;
-    document.getElementById('html_content').value = decoder.value;
+    const html = decoder.value;
+
+    // Load into both editors
+    document.getElementById('html_content').value = html;
+    document.getElementById('html_content_final').value = html;
+    if (tinyReady) {
+        tinymce.get('tinymce_editor').setContent(html);
+    }
 
     document.getElementById('templateIdInput').value = id;
+
+    // Only set subject if empty
     const subj = document.querySelector('input[name="subject"]');
-    if (!subj.value) subj.value = templates[id].subject;
+    if (!subj.value) {
+        const decoder2 = document.createElement('textarea');
+        decoder2.innerHTML = templates[id].subject;
+        subj.value = decoder2.value;
+    }
+
     updatePreview();
 }
 
+// ── Live preview ───────────────────────────────────────────────
 function updatePreview() {
-    const html = document.getElementById('html_content').value;
+    const html = document.getElementById('html_content_final').value
+              || document.getElementById('html_content').value;
     const frame = document.getElementById('previewFrame');
     const doc = frame.contentDocument || frame.contentWindow.document;
     doc.open(); doc.write(html); doc.close();
 }
 
+// ── Contact list validation ────────────────────────────────────
 function validateAndConfirm() {
     const selected = document.querySelector('input[name="contact_list_id"]:checked');
     if (!selected) {
@@ -243,7 +394,6 @@ function validateAndConfirm() {
 
 document.addEventListener('DOMContentLoaded', () => {
     updatePreview();
-    // Highlight selected radio
     document.querySelectorAll('input[name="contact_list_id"]').forEach(r => {
         if (r.checked) r.closest('label').style.borderColor = 'var(--gold)';
         r.addEventListener('change', function() {
